@@ -106,6 +106,25 @@ This ensures the safe script never triggers a permission dialog.
 
 ## Hook I/O Details
 
+### Hook matcher configuration
+
+All three hooks must be scoped to the `Bash` tool in `hooks.json` to avoid firing on `Read`, `Edit`, `Write`, etc.:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "..." }] }
+    ],
+    "PermissionRequest": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "..." }] }
+    ]
+  }
+}
+```
+
+`SessionStart` uses the `startup|clear|compact` event matcher (no tool scoping needed).
+
 ### SessionStart
 
 **Output (Claude Code format):**
@@ -128,9 +147,11 @@ If no scripts exist yet, the hook injects a short onboarding note instead.
 ```json
 {
   "decision": "block",
-  "reason": "[SAFE_SCRIPT_AVAILABLE] name=git-file-log usage='git-file-log <file> [--limit N]' suggested_call='~/.claude/safe-scripts/git-file-log.sh src/Button.tsx --limit 10'"
+  "reason": "[SAFE_SCRIPT_AVAILABLE] name=git-file-log usage='git-file-log <file> [--limit N]' suggested_call='/home/user/.claude/safe-scripts/git-file-log.sh src/Button.tsx --limit 10'"
 }
 ```
+
+The hook expands the safe-scripts path using `$HOME` at runtime so Claude receives a fully-qualified path, not a `~`-relative string.
 
 **No match — output:** *(nothing, exit 0)*
 
