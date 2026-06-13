@@ -35,9 +35,21 @@ The skill encodes four behaviors Claude must follow:
 1. **Proactive preference** — Before writing raw bash, check the injected safe-script catalog. If a script covers the task, use it. Do not write a raw bash equivalent.
 2. **On `[SAFE_SCRIPT_AVAILABLE]` injection** (PreToolUse blocked) — Do not retry the original command. Call the safe script shown in the injection with equivalent arguments.
 3. **On `[OFFER_SAFE_SCRIPT]` injection** (PermissionRequest hint) — In the next reply, offer the user two options: (a) save a generalized safe script (permanent auto-approval), or (b) approve this one time.
-4. **Save procedure** — When the user chooses to save: generalize the command into a parameterized script, write it to the configured directory, append its entry to `manifest.json`, add the script path to `settings.json` allow-list, then re-attempt the task via the new script.
+4. **Save procedure** — When the user chooses to save: generalize the command into a parameterized script, write it to the configured directory, append its entry to `manifest.json`, add the script path to `settings.json` allow-list, re-attempt the task via the new script, and **self-note the new script in the reply** ("I've saved `analyze-csv.py` — I'll use it for the rest of this session whenever I'd otherwise write an equivalent command."). This keeps Claude's in-context catalog current without waiting for the next SessionStart.
 
 The script generalization logic (parameterizing hardcoded values, writing regex match patterns) lives entirely in the skill — no LLM call inside the hook.
+
+### Within-session discovery coverage
+
+The SessionStart catalog is injected once at session start and does not update mid-session. Scripts saved during a session are covered by three overlapping mechanisms:
+
+| Mechanism | Scope | How |
+|---|---|---|
+| **Skill self-note** | Immediate, proactive | Claude notes the new script in its reply; uses it without being intercepted |
+| **PreToolUse hook** | Immediate, reactive | Reads `manifest.json` from disk on every call — reflects any script saved moments ago |
+| **SessionStart injection** | All future sessions | Reflects full manifest at session start |
+
+The PreToolUse hook never caches the manifest. A script saved mid-session is interceptable on the very next bash command.
 
 ---
 
@@ -155,6 +167,28 @@ The hook expands the safe-scripts path using `$HOME` at runtime so Claude receiv
 
 **No match — output:** *(nothing, exit 0)*
 
+### Heredoc commands — two-tier matching
+
+Inline scripts passed via bash heredocs (e.g., `python3 << 'EOF' ... EOF`) cannot be reliably matched by regex against the full command body. The hook uses a two-tier strategy:
+
+**Tier 1 — structural match (hook):** Detect the heredoc structure and interpreter prefix using a pattern like `^(python3?|node|perl|ruby|bash|sh)\s+<<\s*'?[A-Z]+`. When this fires and there are candidate scripts in the manifest with `"heredoc": true`, the hook blocks with a `[HEREDOC_POSSIBLE_MATCH]` injection listing the candidates.
+
+**Tier 2 — semantic match (skill):** Claude receives the `[HEREDOC_POSSIBLE_MATCH]` hint and compares the heredoc body to the saved scripts' content. If a match is found, Claude redirects. If not, Claude treats it as a new command and offers to save.
+
+The manifest gains a `"heredoc": true` flag on entries that originated from heredoc extraction, so Tier 1 only considers them as candidates — not single-script redirects.
+
+```json
+{
+  "name": "analyze-csv",
+  "description": "Summarize a CSV file with pandas",
+  "script": "analyze-csv.py",
+  "usage": "analyze-csv <file>",
+  "patterns": ["^python3?\\s+<<\\s*'?EOF"],
+  "heredoc": true,
+  "added": "2026-06-12"
+}
+```
+
 ### PermissionRequest
 
 **Input (stdin):** `{ "tool_name": "Bash", "tool_input": { "command": "..." } }`
@@ -179,7 +213,7 @@ Because all script execution in Claude Code goes through the `Bash` tool — inc
 
 When saving a new safe script from a command, Claude must:
 
-1. **Detect the interpreter** — examine the command to identify whether it is raw shell, a Python script, a Node script, a Perl one-liner, a compiled binary invocation, etc. This determines the script's shebang and file extension.
+1. **Detect the interpreter and form** — examine the command to identify whether it is raw shell, an interpreter-prefixed file invocation, an inline one-liner, or a **heredoc inline script**. For heredocs, extract the body from between the `<<EOF` markers — this IS the script content. This determines the script's shebang and file extension.
 2. **Identify hardcoded values** — file paths, numeric limits, branch names, test filters, inline code in one-liners. These become positional arguments or named flags.
 3. **Write a parameterized script in the native interpreter** — use the appropriate shebang (`#!/usr/bin/env python3`, `#!/usr/bin/env node`, `#!/usr/bin/env perl`, `#!/bin/bash`, etc.), include a usage comment, and add argument parsing idiomatic to that language.
 4. **Generate regex patterns** — one or more patterns that match the original command and reasonable variants. For interpreter-prefixed commands, patterns must account for interpreter path variation (e.g., `python`, `python3`, `python3.11`).
@@ -196,8 +230,9 @@ When saving a new safe script from a command, Claude must:
 | `perl -ne 'print if /ERROR/' app.log | tail -20` | Perl | `#!/usr/bin/env perl` | `.pl` |
 | `go run ./cmd/migrate --dry-run` | Go (via shell) | `#!/bin/bash` (wraps `go run`) | `.sh` |
 | `npx ts-node src/migrate.ts --env prod` | Node/TS | `#!/bin/bash` (wraps npx) | `.sh` |
+| `python3 << 'EOF'\nimport pandas...\nEOF` | Python (heredoc) | `#!/usr/bin/env python3` | `.py` |
 
-Go and npx/ts-node are invoked via bash wrappers since there is no portable single-interpreter shebang for them.
+Go and npx/ts-node are invoked via bash wrappers since there is no portable single-interpreter shebang for them. Heredoc inline scripts have their body extracted and saved as first-class script files; the manifest entry is flagged `"heredoc": true` to enable two-tier matching on future runs.
 
 ---
 
@@ -252,5 +287,4 @@ claude-safe-scripts/
 
 - No LLM call inside any hook (hooks are pure shell; all reasoning happens in Claude via the skill)
 - No automatic saving without user confirmation
-- No centralized script registry or cloud sync — library is local to the machine/project
-- No centralized registry or versioning for safe scripts — files on disk are the source of truth
+- No centralized script registry, cloud sync, or versioning — files on disk are the source of truth
