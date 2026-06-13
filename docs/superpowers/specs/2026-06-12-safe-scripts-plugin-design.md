@@ -175,13 +175,29 @@ The permission dialog still appears. Claude processes the hint on its next turn 
 
 ## Generalization Rules (skill-encoded)
 
+Because all script execution in Claude Code goes through the `Bash` tool — including `python3 script.py`, `node index.js`, `perl -e '...'`, `go run main.go`, etc. — the same hooks cover every interpreter automatically. No separate matchers are needed.
+
 When saving a new safe script from a command, Claude must:
 
-1. **Identify hardcoded values** — file paths, numeric limits, branch names, test filters. These become positional arguments or named flags.
-2. **Write a parameterized bash script** — includes a usage comment, argument parsing (`$1`, `$2`, or `getopts`/`while` for flags), and the generalized command.
-3. **Generate regex patterns** — one or more patterns that match the original command and reasonable variants (with/without optional flags, different file paths, etc.).
-4. **Choose a descriptive name** — verb-noun kebab-case (e.g., `git-file-log`, `run-tests`, `find-in-files`).
-5. **Show the user the script before saving** — present the script content and name, wait for confirmation, then write to disk.
+1. **Detect the interpreter** — examine the command to identify whether it is raw shell, a Python script, a Node script, a Perl one-liner, a compiled binary invocation, etc. This determines the script's shebang and file extension.
+2. **Identify hardcoded values** — file paths, numeric limits, branch names, test filters, inline code in one-liners. These become positional arguments or named flags.
+3. **Write a parameterized script in the native interpreter** — use the appropriate shebang (`#!/usr/bin/env python3`, `#!/usr/bin/env node`, `#!/usr/bin/env perl`, `#!/bin/bash`, etc.), include a usage comment, and add argument parsing idiomatic to that language.
+4. **Generate regex patterns** — one or more patterns that match the original command and reasonable variants. For interpreter-prefixed commands, patterns must account for interpreter path variation (e.g., `python`, `python3`, `python3.11`).
+5. **Choose a descriptive name** — verb-noun kebab-case (e.g., `git-file-log`, `analyze-csv`, `find-in-files`). Extension reflects interpreter (`.sh`, `.py`, `.js`, `.pl`, etc.).
+6. **Show the user the script before saving** — present the script content and name, wait for confirmation, then write to disk and `chmod +x`.
+
+### Interpreter detection examples
+
+| Original command | Interpreter | Shebang | Extension |
+|---|---|---|---|
+| `git log --oneline -10 -- src/Button.tsx` | bash | `#!/bin/bash` | `.sh` |
+| `python3 analyze.py --input data.csv` | Python | `#!/usr/bin/env python3` | `.py` |
+| `node scripts/seed.js --env staging` | Node | `#!/usr/bin/env node` | `.js` |
+| `perl -ne 'print if /ERROR/' app.log | tail -20` | Perl | `#!/usr/bin/env perl` | `.pl` |
+| `go run ./cmd/migrate --dry-run` | Go (via shell) | `#!/bin/bash` (wraps `go run`) | `.sh` |
+| `npx ts-node src/migrate.ts --env prod` | Node/TS | `#!/bin/bash` (wraps npx) | `.sh` |
+
+Go and npx/ts-node are invoked via bash wrappers since there is no portable single-interpreter shebang for them.
 
 ---
 
@@ -237,4 +253,4 @@ claude-safe-scripts/
 - No LLM call inside any hook (hooks are pure shell; all reasoning happens in Claude via the skill)
 - No automatic saving without user confirmation
 - No centralized script registry or cloud sync — library is local to the machine/project
-- No support for non-Bash script runners (Python, Node, Perl) in v1 — Bash only; other interpreters can be added as future matchers
+- No centralized registry or versioning for safe scripts — files on disk are the source of truth
