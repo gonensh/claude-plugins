@@ -1,3 +1,40 @@
 #!/usr/bin/env bash
-# Stub — implemented in Task 4
-exit 0
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../scripts/lib.sh"
+
+INPUT=$(cat)
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+
+[ -z "$COMMAND" ] && exit 0
+
+SCRIPTS_DIR="$(get_safe_scripts_dir)"
+MANIFEST="$(load_manifest "$SCRIPTS_DIR")"
+
+# Heredoc path: structural match → block for two-tier semantic check by skill
+if is_heredoc "$COMMAND"; then
+    CANDIDATES=$(find_heredoc_candidates "$MANIFEST")
+    if [ -n "$CANDIDATES" ]; then
+        REASON="[HEREDOC_POSSIBLE_MATCH] This command contains an inline script. The following saved safe scripts may cover it:
+${CANDIDATES}
+Invoke the safe-scripts:safe-scripts skill. Compare the heredoc body to each candidate's script file in ${SCRIPTS_DIR}. If a match is found, use that safe script with mapped arguments. If no match, offer to save a new safe script."
+        jq -n --arg r "$REASON" '{"decision":"block","reason":$r}'
+    fi
+    exit 0
+fi
+
+# Standard path: regex pattern match (heredoc:true entries excluded by find_matching_script)
+MATCH=$(find_matching_script "$COMMAND" "$MANIFEST")
+[ -z "$MATCH" ] && exit 0
+
+NAME=$(printf '%s' "$MATCH" | jq -r '.name')
+USAGE=$(printf '%s' "$MATCH" | jq -r '.usage')
+SCRIPT=$(printf '%s' "$MATCH" | jq -r '.script')
+DESC=$(printf '%s' "$MATCH" | jq -r '.description')
+FULL_PATH="${SCRIPTS_DIR}/${SCRIPT}"
+
+REASON="[SAFE_SCRIPT_AVAILABLE] name=${NAME} description='${DESC}' usage='${USAGE}' path='${FULL_PATH}'
+Do not retry the original command. Call the safe script at the path above, mapping arguments from the original command to the usage signature."
+
+jq -n --arg r "$REASON" '{"decision":"block","reason":$r}'
