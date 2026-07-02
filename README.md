@@ -11,7 +11,7 @@ A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-market
 Then install any plugin below by name:
 
 ```shell
-/plugin install <plugin-name>@gonensh-plugins
+/plugin install <plugin-name>@cc-plugins
 ```
 
 Refresh your local copy after new plugins are published with `/plugin marketplace update`.
@@ -23,7 +23,7 @@ Refresh your local copy after new plugins are published with `/plugin marketplac
 | [**safe-scripts**](plugins/safe-scripts/) | Turns one-off Bash commands into reusable, parameterized scripts that preserve their original intent, then pre-approves them — so equivalent commands never trigger a permission dialog again. |
 
 ```shell
-/plugin install safe-scripts@gonensh-plugins
+/plugin install safe-scripts@cc-plugins
 ```
 
 ## Repository layout

@@ -28,7 +28,7 @@ Add the marketplace, then install the plugin:
 
 ```shell
 /plugin marketplace add gonensh/claude-plugins
-/plugin install safe-scripts@gonensh-plugins
+/plugin install safe-scripts@cc-plugins
 ```
 
 ## Usage

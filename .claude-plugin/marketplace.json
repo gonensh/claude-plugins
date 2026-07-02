@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "gonensh-plugins",
+  "name": "cc-plugins",
   "description": "A collection of Claude Code plugins and skills by Gonen Shoham.",
   "owner": {
     "name": "Gonen Shoham",
