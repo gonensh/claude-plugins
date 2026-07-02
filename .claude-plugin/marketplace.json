@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "gonensh-plugins",
+  "description": "A collection of Claude Code plugins and skills by Gonen Shoham.",
+  "owner": {
+    "name": "Gonen Shoham",
+    "email": "gonensh@gmail.com"
+  },
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "safe-scripts",
+      "source": "safe-scripts",
+      "description": "Turns one-off Bash commands into reusable, parameterized scripts that preserve their original intent, then pre-approves them — so equivalent commands never trigger a permission dialog again. Supports bash, Python, Node, Perl, Go, and heredoc scripts.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Gonen Shoham"
+      },
+      "license": "MIT",
+      "category": "permissions",
+      "keywords": ["permissions", "safety", "scripts", "automation", "bash"]
+    }
+  ]
+}
