@@ -20,7 +20,8 @@
       },
       "license": "MIT",
       "category": "permissions",
-      "keywords": ["permissions", "safety", "scripts", "automation", "bash"]
+      "keywords": ["permissions", "safety", "scripts", "automation", "bash"],
+      "skills": "./skills"
     }
   ]
 }
