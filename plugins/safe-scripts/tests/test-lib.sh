@@ -81,6 +81,75 @@ else
     FAIL=$((FAIL+1)); echo "FAIL: find_heredoc_candidates: should not include git-log"
 fi
 
+# --- pending record store ---
+PENDING_ROOT="$TMPDIR_TEST/pending"
+
+assert_eq "$(SAFE_SCRIPTS_PENDING_DIR="$PENDING_ROOT" get_pending_dir)" "$PENDING_ROOT" \
+    "get_pending_dir: env override"
+assert_eq "$(get_pending_dir)" "${HOME}/.claude/safe-scripts/.pending" \
+    "get_pending_dir: default path"
+
+export SAFE_SCRIPTS_PENDING_DIR="$PENDING_ROOT"
+
+write_pending_record "sess1" "git log --oneline -10 -- src/App.tsx" "agent-1" "Explore"
+REC_FILE=$(ls "$PENDING_ROOT/sess1"/*.json | head -1)
+assert_eq "$(jq -r '.command' "$REC_FILE")" "git log --oneline -10 -- src/App.tsx" \
+    "write_pending_record: stores command"
+assert_eq "$(jq -r '.status' "$REC_FILE")" "prompted" "write_pending_record: status prompted"
+assert_eq "$(jq -r '.agent_type' "$REC_FILE")" "Explore" "write_pending_record: stores agent_type"
+assert_eq "$(jq -r '.agent_id' "$REC_FILE")" "agent-1" "write_pending_record: stores agent_id"
+
+FOUND=$(find_prompted_record "sess1" "git log --oneline -10 -- src/App.tsx")
+assert_eq "$FOUND" "$REC_FILE" "find_prompted_record: exact match"
+assert_eq "$(find_prompted_record "sess1" "git log")" "" \
+    "find_prompted_record: no partial match"
+assert_eq "$(find_prompted_record "nosess" "git log --oneline -10 -- src/App.tsx")" "" \
+    "find_prompted_record: missing session returns empty"
+
+approve_pending_record "$REC_FILE"
+assert_eq "$(jq -r '.status' "$REC_FILE")" "approved" "approve_pending_record: flips status"
+assert_eq "$(find_prompted_record "sess1" "git log --oneline -10 -- src/App.tsx")" "" \
+    "find_prompted_record: skips approved records"
+
+APPROVED=$(list_approved_records "sess1")
+assert_eq "$(printf '%s' "$APPROVED" | jq 'length')" "1" "list_approved_records: one record"
+assert_eq "$(printf '%s' "$APPROVED" | jq -r '.[0].command')" \
+    "git log --oneline -10 -- src/App.tsx" "list_approved_records: returns command"
+
+# duplicate command from a second (parallel) subagent → deduped
+write_pending_record "sess1" "git log --oneline -10 -- src/App.tsx" "agent-2" "Plan"
+approve_pending_record "$(find_prompted_record "sess1" "git log --oneline -10 -- src/App.tsx")"
+assert_eq "$(list_approved_records "sess1" | jq 'length')" "1" \
+    "list_approved_records: dedupes identical commands"
+
+# malformed record file is skipped, not fatal
+echo "not json" > "$PENDING_ROOT/sess1/broken.json"
+assert_eq "$(list_approved_records "sess1" 2>/dev/null | jq 'length')" "1" \
+    "list_approved_records: skips malformed record"
+
+# prompted-only session → empty array
+write_pending_record "sess2" "ls -la" "main" ""
+assert_eq "$(list_approved_records "sess2")" "[]" \
+    "list_approved_records: prompted-only returns []"
+
+# missing session dir → empty array
+assert_eq "$(list_approved_records "no-such-session")" "[]" \
+    "list_approved_records: missing dir returns []"
+
+clear_pending_session "sess1"
+assert_false test -d "$PENDING_ROOT/sess1"
+clear_pending_session ""
+assert_true test -d "$PENDING_ROOT"
+
+# sweep: old session dir removed, fresh one kept
+mkdir -p "$PENDING_ROOT/old-sess" "$PENDING_ROOT/fresh-sess"
+touch -m -t 202001010000 "$PENDING_ROOT/old-sess"
+sweep_pending_dirs
+assert_false test -d "$PENDING_ROOT/old-sess"
+assert_true test -d "$PENDING_ROOT/fresh-sess"
+
+unset SAFE_SCRIPTS_PENDING_DIR
+
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
