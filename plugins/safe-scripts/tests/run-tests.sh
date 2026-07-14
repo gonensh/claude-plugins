@@ -27,6 +27,7 @@ run_suite "lib.sh"               "${SCRIPT_DIR}/test-lib.sh"
 run_suite "session-start"        "${SCRIPT_DIR}/test-session-start.sh"
 run_suite "pre-tool-use"         "${SCRIPT_DIR}/test-pre-tool-use.sh"
 run_suite "permission-request"   "${SCRIPT_DIR}/test-permission-request.sh"
+run_suite "post-tool-use-bash"   "${SCRIPT_DIR}/test-post-tool-use-bash.sh"
 
 echo "=== Suite Results: ${TOTAL_PASS} passed, ${TOTAL_FAIL} failed ==="
 [ "$TOTAL_FAIL" -eq 0 ]

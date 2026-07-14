@@ -44,7 +44,7 @@ The hook blocked an inline heredoc script and listed candidate safe scripts.
 
 ## On [OFFER_SAFE_SCRIPT]
 
-A command just needed approval. In your **next reply**, before anything else, present this choice:
+A command you approved just ran. In your **next reply**, before anything else, present this choice:
 
 > "That command ran successfully. I can save a generalized version as a safe script — future similar commands would be auto-approved with no dialog. Want me to:
 > **(a) Save as a safe script** — I'll generalize it, show you the script, and save it permanently

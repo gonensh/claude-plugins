@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../scripts/lib.sh"
+
+INPUT=$(cat)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+
+# Cheap guard: normal sessions have no pending records — exit immediately.
+[ -d "$(get_pending_dir)/${SESSION_ID}" ] || exit 0
+
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+[ -z "$COMMAND" ] && exit 0
+
+RECORD=$(find_prompted_record "$SESSION_ID" "$COMMAND")
+[ -z "$RECORD" ] && exit 0
+
+AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
+
+# Subagent: mark approved; the Task|Agent drain hook surfaces it to the
+# main agent when this subagent returns.
+if [ -n "$AGENT_ID" ]; then
+    approve_pending_record "$RECORD"
+    exit 0
+fi
+
+# Main agent: the command prompted and then ran — offer to save it now.
+rm -f "$RECORD"
+
+DISPLAY_CMD="${COMMAND:0:200}"
+[ "${#COMMAND}" -gt 200 ] && DISPLAY_CMD="${DISPLAY_CMD}..."
+
+CONTEXT="[OFFER_SAFE_SCRIPT] A Bash command you approved just ran: ${DISPLAY_CMD}
+
+Invoke the safe-scripts:safe-scripts skill. In your next reply, offer the user:
+(a) Save a generalized safe script — permanent auto-approval for this and similar commands
+(b) Leave it — run as-is with approval each time"
+
+emit_context "$CONTEXT" "PostToolUse"
