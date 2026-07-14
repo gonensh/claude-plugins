@@ -29,6 +29,7 @@ run_suite "pre-tool-use"         "${SCRIPT_DIR}/test-pre-tool-use.sh"
 run_suite "permission-request"   "${SCRIPT_DIR}/test-permission-request.sh"
 run_suite "post-tool-use-bash"   "${SCRIPT_DIR}/test-post-tool-use-bash.sh"
 run_suite "post-tool-use-task"   "${SCRIPT_DIR}/test-post-tool-use-task.sh"
+run_suite "e2e-bubbling"         "${SCRIPT_DIR}/test-e2e-bubbling.sh"
 
 echo "=== Suite Results: ${TOTAL_PASS} passed, ${TOTAL_FAIL} failed ==="
 [ "$TOTAL_FAIL" -eq 0 ]
