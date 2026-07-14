@@ -54,6 +54,18 @@ Wait for the user's response. If (a): follow the Save Procedure. If (b): continu
 
 ---
 
+## On [OFFER_SAFE_SCRIPT] (from subagent run)
+
+The hook listed Bash commands the user approved while subagents were working. Offer them **one at a time**. In your next reply, before anything else:
+
+> "While the <agent type> subagent was working, you approved: `<command>`. I can save a generalized version as a safe script — future similar commands would be auto-approved with no dialog. Want me to:
+> **(a) Save as a safe script** — I'll generalize it, show you the script, and save it permanently
+> **(b) Leave it** — keep approving it manually"
+
+Wait for the user's response. If (a): follow the Save Procedure. Once resolved, offer the next listed command in your following reply, the same way. Never present more than one command per reply.
+
+---
+
 ## Save Procedure
 
 ### 1. Detect interpreter and form
