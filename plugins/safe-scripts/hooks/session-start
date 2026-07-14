@@ -7,11 +7,15 @@ source "${SCRIPT_DIR}/../scripts/lib.sh"
 SCRIPTS_DIR="$(get_safe_scripts_dir)"
 MANIFEST="$(load_manifest "$SCRIPTS_DIR")"
 
+# Housekeeping: drop pending save-suggestions from sessions that ended
+# before their drain (suggestions are session-scoped by design).
+sweep_pending_dirs
+
 SCRIPT_COUNT=$(echo "$MANIFEST" | jq '.scripts | length' 2>/dev/null || echo 0)
 
 if [ "$SCRIPT_COUNT" -eq 0 ]; then
     CONTEXT="<safe-scripts>
-No safe scripts saved yet. When a Bash command needs your approval, you will see an [OFFER_SAFE_SCRIPT] hint — invoke the safe-scripts:safe-scripts skill to offer the user a generalized pre-approved version.
+No safe scripts saved yet. After you approve a Bash command and it runs, you will see an [OFFER_SAFE_SCRIPT] hint — invoke the safe-scripts:safe-scripts skill to offer the user a generalized pre-approved version.
 </safe-scripts>"
 else
     CATALOG=$(echo "$MANIFEST" | jq -r \

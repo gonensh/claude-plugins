@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/../scripts/lib.sh"
+
+INPUT=$(cat)
+
+# Only drain in the true main agent. Inside a nested subagent tree this
+# hook fires too (agent_id present) — records surface when the top-level
+# Task returns.
+AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
+[ -n "$AGENT_ID" ] && exit 0
+
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+[ -d "$(get_pending_dir)/${SESSION_ID}" ] || exit 0
+
+RECORDS=$(list_approved_records "$SESSION_ID")
+clear_pending_session "$SESSION_ID"
+
+COUNT=$(printf '%s' "$RECORDS" | jq 'length' 2>/dev/null || echo 0)
+[ "$COUNT" -eq 0 ] && exit 0
+
+# Drop commands the manifest already covers (e.g. saved mid-run).
+SCRIPTS_DIR="$(get_safe_scripts_dir)"
+MANIFEST="$(load_manifest "$SCRIPTS_DIR")"
+
+OFFERS=""
+i=0
+while [ "$i" -lt "$COUNT" ]; do
+    CMD=$(printf '%s' "$RECORDS" | jq -r ".[$i].command")
+    ATYPE=$(printf '%s' "$RECORDS" | jq -r ".[$i].agent_type // \"subagent\"")
+    i=$((i+1))
+    [ -n "$(find_matching_script "$CMD" "$MANIFEST")" ] && continue
+    DISPLAY_CMD="${CMD:0:200}"
+    [ "${#CMD}" -gt 200 ] && DISPLAY_CMD="${DISPLAY_CMD}..."
+    OFFERS="${OFFERS}- (${ATYPE:-subagent}) ${DISPLAY_CMD}
+"
+done
+
+[ -z "$OFFERS" ] && exit 0
+
+CONTEXT="[OFFER_SAFE_SCRIPT] (from subagent run) While subagents were working, the user approved these Bash commands:
+${OFFERS}
+Invoke the safe-scripts:safe-scripts skill. In your next reply, offer to save the FIRST command as a generalized safe script:
+(a) Save a generalized safe script — permanent auto-approval for this and similar commands
+(b) Leave it — run as-is with approval each time
+After the user resolves it, offer the next listed command the same way — one command per reply."
+
+emit_context "$CONTEXT" "PostToolUse"
