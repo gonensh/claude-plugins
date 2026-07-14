@@ -6,15 +6,22 @@ source "${SCRIPT_DIR}/../scripts/lib.sh"
 
 INPUT=$(cat)
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
+AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
 
-# Truncate long commands for readability
-DISPLAY_CMD="${COMMAND:0:200}"
-[ "${#COMMAND}" -gt 200 ] && DISPLAY_CMD="${DISPLAY_CMD}..."
+[ -z "$COMMAND" ] && exit 0
 
-CONTEXT="[OFFER_SAFE_SCRIPT] A Bash command needs your approval: ${DISPLAY_CMD}
+# Record the prompt; approval is confirmed later by the PostToolUse(Bash)
+# hook (which only fires if the command actually ran).
+write_pending_record "$SESSION_ID" "$COMMAND" "${AGENT_ID:-main}" "$AGENT_TYPE"
 
-Invoke the safe-scripts:safe-scripts skill. In your next reply, offer the user:
-(a) Save a generalized safe script — permanent auto-approval for this and similar commands
-(b) Approve once — run as-is this time only"
+# Main agent: say nothing here — the offer is emitted after the command
+# runs, so denied commands never generate offers.
+[ -z "$AGENT_ID" ] && exit 0
+
+# Subagent: it has no conversation with the user, so it must not run the
+# save flow. The main agent will offer after this subagent returns.
+CONTEXT="[SAFE_SCRIPT_DEFERRED] This command needed user approval. Do NOT offer to save it as a safe script and do NOT invoke the safe-scripts skill — you have no direct conversation with the user. If approved, the main agent will offer to save it after you finish. Just continue your task."
 
 emit_context "$CONTEXT" "PermissionRequest"
